@@ -38,23 +38,31 @@ class LinearClinicalBaseline(MultiArmedBandit):
 def predict_dosages(baseline, features):
     return features.apply(bandit.estimate_dosage, axis=1)
 
-if __name__ == "__main__":
-    # df = pd.read_csv('../data/clinical_dosing_features.csv')    
-    # features = df[['Bias', 'Age in decades', 'Height (cm)', 'Weight (kg)', 'Asian', 'Black or African American', 
-    #            'Missing or Mixed Race','Enzyme inducer status', 'Amiodarone status']]
-    # true_dosages = df['dosage_bucket']
+def get_fixed_baseline():
+    fixed_baseline = FixedDoseBaseline()
 
+    # read in csv and get non na values
+    df = pd.read_csv('../data/warfarin.csv')
+    df = df.dropna(subset = ['Therapeutic Dose of Warfarin'])
+
+    # get predicted buckets and true dosage buckets
+    dosage_buckets = df.apply(fixed_baseline.estimate_dosage, axis=1)
+    true_dosages = (df['Therapeutic Dose of Warfarin'] / 7).apply(get_bucket)
+
+    accuracy = get_accuracy(dosage_buckets, true_dosages)
+    print('accuracy of {} is {}'.format(fixed_baseline, accuracy))
+
+def get_linear_baseline():
     df, features, true_dosages = get_features_and_dosage('../data/clinical_dosing_features.csv')
 
-    def get_dosage_bucket(x):
-        dosage = x.dot(beta)**2 / 7
-        return get_bucket(dosage)
-
-    fixed_baseline = FixedDoseBaseline()
+    # get predicted dosages
     linear_baseline = LinearClinicalBaseline()
-    baselines = [fixed_baseline, linear_baseline]
+    dosage_buckets = features.apply(linear_baseline.estimate_dosage, axis=1)
 
-    for baseline in baselines:
-        dosage_buckets = features.apply(baseline.estimate_dosage, axis=1)
-        accuracy = get_accuracy(dosage_buckets, true_dosages)
-        print('accuracy of {} is {}'.format(baseline, accuracy))
+    accuracy = get_accuracy(dosage_buckets, true_dosages)
+    print('accuracy of {} is {}'.format(linear_baseline, accuracy))
+
+if __name__ == "__main__":
+    get_fixed_baseline()
+    get_linear_baseline()
+  

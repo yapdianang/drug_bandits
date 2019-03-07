@@ -3,7 +3,7 @@ import pandas as pd
 def get_bucket(dosage):
 	if dosage < 3:
 		return 'low'
-	elif dosage < 7:
+	elif dosage <= 7:
 		return 'medium'
 	else:
 		return 'high'
