@@ -22,7 +22,7 @@ def get_features_and_dosage(file):
 
 	return df, features, true_dosages
 
-def get_data(seed=42):
+def get_data(seed=234):
 	df = pd.read_csv('../data/warfarin.csv')
 	df = df.dropna(subset = ['Therapeutic Dose of Warfarin'])
 	df['dosage_bucket'] = (df['Therapeutic Dose of Warfarin'] / 7).apply(get_bucket)
@@ -41,4 +41,8 @@ def get_data(seed=42):
 	features_array = np.array(features)
 	np.random.seed(seed)
 	np.random.shuffle(features_array)	
-	return features[:,:-1], features[:,-1]
+	# returns np array of features and ground truth
+	return features_array[:,:-1], features_array[:,-1]
+
+f,x = get_data()
+print(f,x)
