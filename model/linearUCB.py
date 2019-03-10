@@ -1,5 +1,5 @@
 import numpy as np
-
+from utils import get_data
 
 
 class DataStream(object):
@@ -9,10 +9,10 @@ class DataStream(object):
         # yield feature vector extracted from that row, and ground truth action
 
     def __init__(self, csv_path):
-        self.path = None
-        self.table = None
-        self.max_rows = None
-        self.current = None
+        self.table, self.ground_truth = get_data(csv_path)
+        self.max_rows = len(self.table)
+        self.feature_dim = self.table.shape[-1]
+        self.current = 0
 
     # Iterator methods
 
@@ -23,7 +23,9 @@ class DataStream(object):
         if self.current >= self.max_rows:
             raise StopIteration
         else:
-            return None
+            self.current += 1
+            return (self.table[self.current], self.ground_truth[self.current])
+
 
 
 def alpha(delta, T, K):
@@ -53,6 +55,18 @@ class LinearUCBBandit(object):
 
     # At some timestep t, we get a new action
     def get_action(self, features, ground_truth_action):
+        
+        # Translate the strings "low", "medium", "high" into (0,1,2) resp.
+        if ground_truth_action == "low":
+            ground_truth_action = 0
+        elif ground_truth_action == "medium":
+            ground_truth_action = 1
+        elif ground_truth_action == "high":
+            ground_truth_action = 2
+        else:
+            raise ValueError("ground_truth_action: not one of 'low', 'medium', 'high'")
+
+
         self.theta = np.linalg.pinv(self.A).dot(self.b)  # pseudo-inverse if noninvertible A, otherwise inverse
 
         # features_k is just features (we don't have diff features for each of K actions)
@@ -77,5 +91,17 @@ class LinearUCBBandit(object):
 
 if __name__ == "__main__":
     # Run the stream of data through LinearUCBBandit, and get regret and prediction accuracy
-    bandit = LinearUCBBandit(0.5, 3, 10)
+    ds = DataStream("../data/warfarin.csv")
+    delta = 0.1
+    bandit = LinearUCBBandit(ds.max_rows, 3, ds.feature_dim, delta)
+
+    total_regret = 0
+    nb_correct = 0
+    for features, ground_truth_action in ds:
+        best_action, reward, regret = bandit.get_action(features, ground_truth_action)
+        total_regret += regret
+        nb_correct += 1 if (reward == 0) else 0
+    accuracy = nb_correct / ds.max_rows
+
+
 

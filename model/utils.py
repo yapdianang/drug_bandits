@@ -22,8 +22,8 @@ def get_features_and_dosage(file):
 
 	return df, features, true_dosages
 
-def get_data(seed=234):
-	df = pd.read_csv('../data/warfarin.csv')
+def get_data(path, seed=234):
+	df = pd.read_csv(path)
 	df = df.dropna(subset = ['Therapeutic Dose of Warfarin'])
 	df['dosage_bucket'] = (df['Therapeutic Dose of Warfarin'] / 7).apply(get_bucket)
 
@@ -44,5 +44,3 @@ def get_data(seed=234):
 	# returns np array of features and ground truth
 	return features_array[:,:-1], features_array[:,-1]
 
-f,x = get_data()
-print(f,x)
