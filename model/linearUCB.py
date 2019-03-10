@@ -25,10 +25,25 @@ class DataStream(object):
         else:
             return None
 
+
+def alpha(delta, T, K):
+    # K = 3 actions
+    return np.sqrt(0.5 * np.log(2*T*K / delta))
+
 class LinearUCBBandit(object):
 
-    def __init__(self, alpha, K, d):
-        self.alpha = alpha
+    def __init__(self, T, K, d, delta):
+        """ Linear UCB Bandit algorithm. 
+            "Contextual Bandits with Linear Payoff Functions":
+                http://proceedings.mlr.press/v15/chu11a/chu11a.pdf
+
+            Params:
+                T := total # timesteps we are running the bandit
+                K := size of discrete action space
+                d := dimension of the feature vectors
+                delta := choice of parameter for asymptotic convergence guarantees
+        """
+        self.alpha = alpha(delta, T, K)
         self.K = K
         self.d = d
         self.A = np.eye(self.d, dtype=np.float64) # (d,d) identity matrix
