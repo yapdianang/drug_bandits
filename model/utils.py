@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 
 def get_bucket(dosage):
 	if dosage < 3:
@@ -20,3 +21,24 @@ def get_features_and_dosage(file):
 	true_dosages = df['dosage_bucket']
 
 	return df, features, true_dosages
+
+def get_data(seed=42):
+	df = pd.read_csv('../data/warfarin.csv')
+	df = df.dropna(subset = ['Therapeutic Dose of Warfarin'])
+	df['dosage_bucket'] = (df['Therapeutic Dose of Warfarin'] / 7).apply(get_bucket)
+
+	feature_list = ['Gender', 'Race', 'Ethnicity', 'Age', 'Cyp2C9 genotypes', \
+            'VKORC1 genotype: -1639 G>A (3673); chr16:31015190; rs9923231; C/T', \
+            'VKORC1 genotype: 497T>G (5808); chr16:31013055; rs2884737; A/C', \
+            'VKORC1 QC genotype: 1173 C>T(6484); chr16:31012379; rs9934438; A/G', \
+            'VKORC1 genotype: 1542G>C (6853); chr16:31012010; rs8050894; C/G', \
+            'VKORC1 genotype: 3730 G>A (9041); chr16:31009822; rs7294;  A/G', \
+            'VKORC1 genotype: 2255C>T (7566); chr16:31011297; rs2359612; A/G', \
+            'VKORC1 genotype: -4451 C>A (861); Chr16:31018002; rs17880887; A/C']
+	features = pd.get_dummies(df[feature_list], dummy_na=True)
+	features['bias'] = 1
+	features['dosage_bucket'] = df['dosage_bucket']
+	features_array = np.array(features)
+	np.random.seed(seed)
+	np.random.shuffle(features_array)	
+	return features[:,:-1], features[:,-1]
