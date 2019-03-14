@@ -30,6 +30,7 @@ def get_data(path, seed=234):
 	df['Phenytoin (Dilantin)'] = df['Phenytoin (Dilantin)'].astype('object')
 	df['Rifampin or Rifampicin'] = df['Rifampin or Rifampicin'].astype('object')
 
+	# feature_list = ['Gender']
 	feature_list = ['Gender', 'Race', 'Ethnicity', 'Age', 'Cyp2C9 genotypes', \
             'VKORC1 genotype: -1639 G>A (3673); chr16:31015190; rs9923231; C/T', \
             'VKORC1 genotype: 497T>G (5808); chr16:31013055; rs2884737; A/C', \
