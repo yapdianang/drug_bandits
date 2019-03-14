@@ -83,7 +83,7 @@ class LinearUCBBandit(object):
 
 
     # At some timestep t, we get a new action
-    def get_action(self, features, ground_truth_action):
+    def get_action(self, features, ground_truth_action, training=False):
         features = features.astype(int) 
         # Translate the strings "low", "medium", "high" into (0,1,2) resp.
         if ground_truth_action == "low":
@@ -99,7 +99,10 @@ class LinearUCBBandit(object):
         all_upper_bounds = []
         for action in range(self.K):
             A,b = self.A[action], self.b[action]
-            theta = np.linalg.pinv(A).dot(b)  # pseudo-inverse if noninvertible A, otherwise inverse
+            try:
+                theta = np.linalg.inv(A).dot(b)
+            except:
+                theta = np.linalg.pinv(A).dot(b)  # pseudo-inverse if noninvertible A, otherwise inverse
             xT_A_x = features.T.dot(np.linalg.pinv(A)).dot(features)
             ucb_variance = self.alpha * np.sqrt(xT_A_x)
             upper_bound = theta.dot(features) + ucb_variance
@@ -120,19 +123,29 @@ class LinearUCBBandit(object):
         
         regret = 0. - reward # optimal reward is always 0 (correct dosage given)
 
-        # Update
-        self.A[best_action] = self.A[best_action] + np.outer(features, features)
-        self.b[best_action] = self.b[best_action] + features * reward
+        # Update if training
+        if training:
+            self.A[best_action] = self.A[best_action] + np.outer(features, features)
+            self.b[best_action] = self.b[best_action] + features * reward
 
         return best_action, reward, regret
 
+def evaluate(seed, bandit):
+    ds = DataStream("../data/warfarin.csv", seed=seed)
+    all_actions, nb_correct = 0, 0
+    for i, (features, ground_truth_action) in enumerate(ds):
+        best_action, reward, regret = bandit.get_action(features, ground_truth_action, training=False)
+        all_actions += 1
+        nb_correct += 1. if (reward == 0) else 0.
+    return (nb_correct/all_actions)
 
 
 def perform_one_run(seed, incorrect_accuracy_over_runs, regret_over_runs, mode):
     ds = DataStream("../data/warfarin.csv", seed=seed)
     delta = 0.75  # UNUSED
     bandit = LinearUCBBandit(ds.max_rows, 3, ds.feature_dim, delta, mode)
-    print(ds.feature_dim, bandit.alpha)
+
+    print("Feature dimensions: {}, alpha: {}".format(ds.feature_dim, bandit.alpha))
 
     total_regret = 0
     nb_correct = 0
@@ -140,7 +153,7 @@ def perform_one_run(seed, incorrect_accuracy_over_runs, regret_over_runs, mode):
     x_vals, seed_regrets, seed_incorrects = [], [], [] 
 
     for i, (features, ground_truth_action) in enumerate(ds):
-        best_action, reward, regret = bandit.get_action(features, ground_truth_action)
+        best_action, reward, regret = bandit.get_action(features, ground_truth_action, training=True)
         actions[best_action] += 1
         total_regret += regret
         nb_correct += 1 if (reward == 0) else 0
@@ -148,14 +161,15 @@ def perform_one_run(seed, incorrect_accuracy_over_runs, regret_over_runs, mode):
         # get values
         if i>=100 and i%250 == 0:
             x_vals.append(i)
-            acc = nb_correct / (i+1)
+            # acc = nb_correct / (i+1)
             seed_regrets.append(total_regret)
+            acc = evaluate(seed, bandit)
             seed_incorrects.append(1-acc) 
+            print("accuracy at step {}: {}".format(i, acc))
 
     accuracy = nb_correct / ds.max_rows
 
-    print(actions)
-    print("accuracy:", accuracy)
+    print("Actions: ", actions)
     print("total regret:", total_regret)
     incorrect_accuracy_over_runs.append(seed_incorrects)
     regret_over_runs.append(seed_regrets)
