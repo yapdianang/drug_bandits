@@ -1,6 +1,7 @@
 import numpy as np
 from utils import get_data
 from collections import defaultdict
+from plot import plot_incorrects_and_regrets
 import argparse
 import pickle
 import os
@@ -127,7 +128,7 @@ class LinearUCBBandit(object):
 
 
 
-def perform_one_run(seed, accuracy_over_runs, regret_over_runs, mode):
+def perform_one_run(seed, incorrect_accuracy_over_runs, regret_over_runs, mode):
     ds = DataStream("../data/warfarin.csv", seed=seed)
     delta = 0.75  # UNUSED
     bandit = LinearUCBBandit(ds.max_rows, 3, ds.feature_dim, delta, mode)
@@ -136,18 +137,29 @@ def perform_one_run(seed, accuracy_over_runs, regret_over_runs, mode):
     total_regret = 0
     nb_correct = 0
     actions = defaultdict(int)
-    for features, ground_truth_action in ds:
+    x_vals, seed_regrets, seed_incorrects = [], [], [] 
+
+    for i, (features, ground_truth_action) in enumerate(ds):
         best_action, reward, regret = bandit.get_action(features, ground_truth_action)
         actions[best_action] += 1
         total_regret += regret
         nb_correct += 1 if (reward == 0) else 0
+
+        # get values
+        if i>=100 and i%250 == 0:
+            x_vals.append(i)
+            acc = nb_correct / (i+1)
+            seed_regrets.append(total_regret)
+            seed_incorrects.append(1-acc) 
+
     accuracy = nb_correct / ds.max_rows
+
     print(actions)
     print("accuracy:", accuracy)
     print("total regret:", total_regret)
-    accuracy_over_runs.append(accuracy)
-    regret_over_runs.append(total_regret)
-
+    incorrect_accuracy_over_runs.append(seed_incorrects)
+    regret_over_runs.append(seed_regrets)
+    return x_vals
 
 if __name__ == "__main__":
 
@@ -157,15 +169,21 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Run the stream of data through LinearUCBBandit, and get regret and prediction accuracy
+
     seeds = range(10)
-    accuracy_over_runs, regret_over_runs = [], []
+    # store the list of 
+    incorrect_accuracy_over_runs, regret_over_runs = [], []
     for seed in seeds:
-        perform_one_run(seed, accuracy_over_runs, regret_over_runs, args.mode)
-        
+        x_vals = perform_one_run(seed, incorrect_accuracy_over_runs, regret_over_runs, args.mode)
+    
+    # plot incorrect and regret with confidence bounds 
+    plot_incorrects_and_regrets(x_vals, incorrect_accuracy_over_runs, regret_over_runs, args.mode) 
     # Store our accuracies and regret
     prefix = "linearUCB_" + args.mode
-    with open(os.path.join("../output", prefix + "_accuracy.pkl"), "wb") as f:
-        pickle.dump(accuracy_over_runs, f)
+    with open(os.path.join("../output", prefix + "_x_vals.pkl"), "wb") as f:
+        pickle.dump(x_vals, f)
+    with open(os.path.join("../output", prefix + "_incorrect_accuracy.pkl"), "wb") as f:
+        pickle.dump(incorrect_accuracy_over_runs, f)
     with open(os.path.join("../output", prefix + "_regret.pkl"), "wb") as f:
         pickle.dump(regret_over_runs, f)
 
