@@ -15,10 +15,14 @@ class DataStream(object):
         # yield feature vector extracted from that row, and ground truth action
 
     def __init__(self, csv_path, seed=234):
-        # This line determines discrete buckets vs. floating point dosages #######################################################
-        X, y = get_data(csv_path, seed)
-        # use seed to fix randomness
-        self.table, self.table_test, self.ground_truth, self.ground_truth_test = train_test_split(X, y, test_size=0.1, random_state=seed)
+        features, dosage = get_data(csv_path, seed)
+
+        self.table, self.table_test, y, y_test = \
+                train_test_split(features, dosage, test_size=0.1, random_state=seed)
+
+        self.ground_truth, self.dosage = y[:,0], y[:,1]
+        self.ground_truth_test, self.dosage_test = y_test[:,0], y_test[:,1]
+
         self.max_rows = len(self.table)
         self.feature_dim = self.table.shape[-1]
         self.current = 0
@@ -36,7 +40,7 @@ class DataStream(object):
 
             # Depends on what Justin's csv columns contain
 
-            output = (self.table[self.current], self.ground_truth[self.current]) 
+            output = (self.table[self.current], self.ground_truth[self.current], self.dosage[self.current]) 
             self.current += 1
             return output
 
@@ -79,9 +83,17 @@ class LinearUCBBandit(object):
     def harsh_loss(self, best, truth):
         return -(np.abs(best - truth).astype(float))
 
+    def real_loss(self, best, real_dosage):
+        if best == 0:
+            val = 1.5
+        elif best == 1:
+            val = 5
+        else:
+            val = 9
+        return -(np.abs(val - real_dosage))
 
     # At some timestep t, we get a new action
-    def get_action(self, features, ground_truth_action, training=False):
+    def get_action(self, features, ground_truth_action, real_dosage, training=False):
         features = features.astype(int) 
         # Translate the strings "low", "medium", "high" into (0,1,2) resp.
         if ground_truth_action == "low":
@@ -109,7 +121,6 @@ class LinearUCBBandit(object):
         # Randomly tiebreak among the actions with the highest UCB
         best_action = np.random.choice([i for i,p in enumerate(all_upper_bounds) if p == np.amax(all_upper_bounds)])
         
-
         # Choose action, observe payoff
         # reward = 0. if best_action == ground_truth_action else -1.
         if self.mode == "normal":
@@ -118,6 +129,8 @@ class LinearUCBBandit(object):
             reward = self.mse_loss(best_action, ground_truth_action)
         elif self.mode == "harsh":
             reward = self.harsh_loss(best_action, ground_truth_action)
+        elif self.mode == "real":
+            reward = self.real_loss(best_action, real_dosage)
         
         regret = 0. - reward # optimal reward is always 0 (correct dosage given)
 
@@ -131,10 +144,11 @@ class LinearUCBBandit(object):
 def evaluate(seed, ds, bandit):
     all_actions, nb_correct = 0, 0
     # run this on the test set
-    for i, (features, ground_truth_action) in enumerate(zip(ds.table_test, ds.ground_truth_test)):
-        best_action, reward, regret = bandit.get_action(features, ground_truth_action, training=False)
+    actions = ['low', 'medium', 'high']
+    for i, (features, ground_truth_action, real_dosage) in enumerate(zip(ds.table_test, ds.ground_truth_test, ds.dosage_test)):
+        best_action, reward, regret = bandit.get_action(features, ground_truth_action, real_dosage, training=False)
         all_actions += 1
-        nb_correct += 1. if (reward == 0) else 0.
+        nb_correct += 1. if (actions[best_action] == ground_truth_action) else 0.
     return (nb_correct/all_actions)
 
 
@@ -150,8 +164,8 @@ def perform_one_run(seed, incorrect_accuracy_over_runs, regret_over_runs, mode):
     actions = defaultdict(int)
     x_vals, seed_regrets, seed_incorrects = [], [], [] 
 
-    for i, (features, ground_truth_action) in enumerate(ds):
-        best_action, reward, regret = bandit.get_action(features, ground_truth_action, training=True)
+    for i, (features, ground_truth_action, real_dosage) in enumerate(ds):
+        best_action, reward, regret = bandit.get_action(features, ground_truth_action, real_dosage, training=True)
         actions[best_action] += 1
         total_regret += regret
         nb_correct += 1 if (reward == 0) else 0
@@ -176,12 +190,12 @@ def perform_one_run(seed, incorrect_accuracy_over_runs, regret_over_runs, mode):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='CS 234 default project.')
-    parser.add_argument("--mode", choices=["normal", "mse", "harsh"], 
+    parser.add_argument("--mode", choices=["normal", "mse", "harsh", "real"], 
                         help="variation of linearUCB to run.", default="normal")
     args = parser.parse_args()
 
     # Run the stream of data through LinearUCBBandit, and get regret and prediction accuracy
-
+    print(args.mode)
     seeds = range(10)
     # store the list of 
     incorrect_accuracy_over_runs, regret_over_runs = [], []

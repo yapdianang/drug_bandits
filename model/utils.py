@@ -52,9 +52,11 @@ def get_data(path, seed=234):
 	features = pd.get_dummies(df[feature_list], dummy_na=True)
 	features['bias'] = 1
 	features['dosage_bucket'] = df['dosage_bucket']
+	# get the daily dose
+	features['real_dosage'] = df['Therapeutic Dose of Warfarin'] / 7
 	features_array = np.array(features)
 	np.random.seed(seed)
 	np.random.shuffle(features_array)	
-	# returns np array of features and ground truth
-	return features_array[:,:-1], features_array[:,-1]
+	# returns np array of features and ground truth bucket and real valued dosage
+	return features_array[:,:-2], features_array[:,-2:]
 
