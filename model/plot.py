@@ -17,15 +17,16 @@ def plot_incorrects_and_regrets(x_vals, incorrects, regrets, name):
 	plt.xlabel('patients seen')
 	plt.ylabel('regret')
 	plt.title('regret over patients seen')
-	plt.savefig('plots/'+str(name)+'_regret.png')
+	plt.savefig('../plots/'+str(name)+'_regret.png')
 	plt.clf()
 	#plt.show()
 
-	plt.errorbar(x_vals, incorrect_means, yerr = incorrect_stds*2)
+	# construct a 95% confidence interval
+	plt.errorbar(x_vals, incorrect_means, yerr = incorrect_stds*1.96)
 	plt.xlabel('patients seen')
 	plt.ylabel('percentage incorrect')
 	plt.title('percentage incorrect over patients seen')
-	plt.savefig('plots/'+str(name)+'_incorrect.png')
+	plt.savefig('../plots/'+str(name)+'_incorrect.png')
 	# plt.show()
 
 def main():

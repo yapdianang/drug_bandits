@@ -2,6 +2,7 @@ import numpy as np
 from utils import get_data
 from collections import defaultdict
 from plot import plot_incorrects_and_regrets
+from sklearn.model_selection import train_test_split
 import argparse
 import pickle
 import os
@@ -15,8 +16,9 @@ class DataStream(object):
 
     def __init__(self, csv_path, seed=234):
         # This line determines discrete buckets vs. floating point dosages #######################################################
-        # This line determines discrete buckets vs. floating point dosages #######################################################
-        self.table, self.ground_truth = get_data(csv_path, seed)
+        X, y = get_data(csv_path, seed)
+        # use seed to fix randomness
+        self.table, self.table_test, self.ground_truth, self.ground_truth_test = train_test_split(X, y, test_size=0.1, random_state=seed)
         self.max_rows = len(self.table)
         self.feature_dim = self.table.shape[-1]
         self.current = 0
@@ -30,10 +32,6 @@ class DataStream(object):
         if self.current >= self.max_rows:
             raise StopIteration
         else:
-            # This line determines discrete buckets vs. floating point dosages #######################################################
-            # This line determines discrete buckets vs. floating point dosages #######################################################
-            # This line determines discrete buckets vs. floating point dosages #######################################################
-            # This line determines discrete buckets vs. floating point dosages #######################################################
             # This line determines discrete buckets vs. floating point dosages #######################################################
 
             # Depends on what Justin's csv columns contain
@@ -130,10 +128,10 @@ class LinearUCBBandit(object):
 
         return best_action, reward, regret
 
-def evaluate(seed, bandit):
-    ds = DataStream("../data/warfarin.csv", seed=seed)
+def evaluate(seed, ds, bandit):
     all_actions, nb_correct = 0, 0
-    for i, (features, ground_truth_action) in enumerate(ds):
+    # run this on the test set
+    for i, (features, ground_truth_action) in enumerate(zip(ds.table_test, ds.ground_truth_test)):
         best_action, reward, regret = bandit.get_action(features, ground_truth_action, training=False)
         all_actions += 1
         nb_correct += 1. if (reward == 0) else 0.
@@ -163,7 +161,7 @@ def perform_one_run(seed, incorrect_accuracy_over_runs, regret_over_runs, mode):
             x_vals.append(i)
             # acc = nb_correct / (i+1)
             seed_regrets.append(total_regret)
-            acc = evaluate(seed, bandit)
+            acc = evaluate(seed, ds, bandit)
             seed_incorrects.append(1-acc) 
             print("accuracy at step {}: {}".format(i, acc))
 
