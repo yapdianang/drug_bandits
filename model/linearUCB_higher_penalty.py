@@ -85,7 +85,7 @@ class LinearUCBBandit(object):
         # Penalize higher is distance is further
 
         # reward = 0. if best_action == ground_truth_action else -1.        
-        reward = -np.max(best_action - ground_truth_action).astype(float)
+        reward = -(np.abs(best_action - ground_truth_action).astype(float)**1)
 
         regret = 0 - reward # optimal reward is always 0 (correct dosage given)
 
