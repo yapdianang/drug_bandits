@@ -96,6 +96,7 @@ class LinearUCBBandit(object):
 if __name__ == "__main__":
     # Run the stream of data through LinearUCBBandit, and get regret and prediction accuracy
     seeds = range(10)
+    accuracy_history, incorrect_history = [], []
     for seed in seeds: 
         ds = DataStream("../data/warfarin.csv", seed=seed)
         delta = 0.75
@@ -113,6 +114,9 @@ if __name__ == "__main__":
         accuracy = nb_correct / ds.max_rows
         print(actions)
         print(accuracy, total_regret)
+        accuracy_history.append(accuracy)
+        incorrect_history.append(total_regret)
             
+    # plot here
 
 
