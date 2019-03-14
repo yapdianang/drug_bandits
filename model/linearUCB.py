@@ -76,10 +76,10 @@ class LinearUCBBandit(object):
         return 0. if best == truth else -1.
 
     def mse_loss(self, best, truth):
-        return (best - truth) ** 2
+        return -((best - truth).astype(float) ** 2)
 
     def harsh_loss(self, best, truth):
-        return np.abs(best - truth)
+        return -(np.abs(best - truth).astype(float))
 
 
     # At some timestep t, we get a new action
@@ -118,7 +118,7 @@ class LinearUCBBandit(object):
         elif self.mode == "harsh":
             reward = self.harsh_loss(best_action, ground_truth_action)
         
-        regret = 0 - reward # optimal reward is always 0 (correct dosage given)
+        regret = 0. - reward # optimal reward is always 0 (correct dosage given)
 
         # Update
         self.A[best_action] = self.A[best_action] + np.outer(features, features)
@@ -179,6 +179,7 @@ if __name__ == "__main__":
     # plot incorrect and regret with confidence bounds 
     plot_incorrects_and_regrets(x_vals, incorrect_accuracy_over_runs, regret_over_runs, args.mode) 
     # Store our accuracies and regret
+    """
     prefix = "linearUCB_" + args.mode
     with open(os.path.join("../output", prefix + "_x_vals.pkl"), "wb") as f:
         pickle.dump(x_vals, f)
@@ -186,5 +187,6 @@ if __name__ == "__main__":
         pickle.dump(incorrect_accuracy_over_runs, f)
     with open(os.path.join("../output", prefix + "_regret.pkl"), "wb") as f:
         pickle.dump(regret_over_runs, f)
+    """
 
 
