@@ -6,6 +6,7 @@ import numpy as np
 seeds = range(10)
 
 def plot_incorrects_and_regrets(x_vals, incorrects, regrets, name):
+
 	incorrect_means = np.mean(np.array(incorrects), axis=0)
 	incorrect_stds = np.std(np.array(incorrects), axis=0, ddof=1) / np.sqrt(len(incorrects))
 
@@ -18,7 +19,7 @@ def plot_incorrects_and_regrets(x_vals, incorrects, regrets, name):
 	plt.title('regret over patients seen')
 	plt.savefig('plots/'+str(name)+'_regret.png')
 	plt.clf()
-	# plt.show()
+	#plt.show()
 
 	plt.errorbar(x_vals, incorrect_means, yerr = incorrect_stds*2)
 	plt.xlabel('patients seen')
