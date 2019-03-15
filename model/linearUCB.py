@@ -1,13 +1,12 @@
 import numpy as np
 import pandas as pd
-from utils import get_data
+from utils import get_data, DataStream
 from collections import defaultdict
 from plot import plot_
 from sklearn.model_selection import train_test_split
 import argparse
 import pickle
 import os
-
 
 class DataStream(object):
     # Read in a csv, shuffle rows.
@@ -53,13 +52,6 @@ class DataStream(object):
 
     def __len__(self):
         return len(self.table)
-
-
-
-def alpha(delta, T, K):
-    """ DEPRECATED """
-    # K = 3 actions
-    return np.sqrt(0.5 * np.log(2*T*K / delta))
 
 
 
