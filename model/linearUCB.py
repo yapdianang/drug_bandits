@@ -3,55 +3,9 @@ import pandas as pd
 from utils import get_data, DataStream
 from collections import defaultdict
 from plot import plot_
-from sklearn.model_selection import train_test_split
 import argparse
 import pickle
 import os
-
-class DataStream(object):
-    # Read in a csv, shuffle rows.
-    # Iterator below.
-    # For each row:
-        # yield feature vector extracted from that row, and ground truth action
-
-    def __init__(self, csv_path, val=False, seed=234):
-        # make train and test the same if not running on validation set
-        self.table, y = get_data(csv_path, seed)
-        self.table_test = self.table
-        self.ground_truth, self.dosage = y[:,0], y[:,1]
-        self.ground_truth_test, self.dosage_test = y[:,0], y[:,1]
-
-        # if validation set, then split the data
-        if val:
-            self.table, self.table_test, y, y_test = \
-                    train_test_split(self.table, y, test_size=0.1, random_state=seed, stratify=y[:,0])
-            self.ground_truth, self.dosage = y[:,0], y[:,1]
-            self.ground_truth_test, self.dosage_test = y_test[:,0], y_test[:,1]
-
-
-        self.max_rows = len(self.table)
-        self.feature_dim = self.table.shape[-1]
-        self.current = 0
-
-    # Iterator methods
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        if self.current >= self.max_rows:
-            raise StopIteration
-        else:
-            # This line determines discrete buckets vs. floating point dosages #######################################################
-
-            # Depends on what Justin's csv columns contain
-
-            output = (self.table[self.current], self.ground_truth[self.current], self.dosage[self.current]) 
-            self.current += 1
-            return output
-
-    def __len__(self):
-        return len(self.table)
 
 
 
