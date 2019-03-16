@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from utils import get_data, DataStream
+from losses import calculate_reward
 from collections import defaultdict
 from plot import plot_
 import argparse
@@ -79,14 +80,7 @@ class LinearUCBBandit(object):
         
         # Choose action, observe payoff
         # reward = 0. if best_action == ground_truth_action else -1.
-        if self.mode == "normal":
-            reward = self.normal_loss(best_action, ground_truth_action)
-        elif self.mode == "mse":
-            reward = self.mse_loss(best_action, ground_truth_action)
-        elif self.mode == "harsh":
-            reward = self.harsh_loss(best_action, ground_truth_action)
-        elif self.mode == "real":
-            reward = self.real_loss(best_action, real_dosage)
+        reward = calculate_reward(best_action, ground_truth_action, real_dosage, self.mode)
         
         risk = np.abs(best_action - ground_truth_action) 
         regret = 0. - reward # optimal reward is always 0 (correct dosage given)
