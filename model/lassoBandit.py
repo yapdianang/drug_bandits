@@ -1,5 +1,9 @@
 import numpy as np
+
+from sklearn.linear_model import Lasso
 from utils import DataStream
+
+np.seed(234)
 
 class LASSOBandit(object):
     """ Implemented according to:
@@ -31,10 +35,13 @@ class LASSOBandit(object):
         self.S = {i : [] for i in range(self.K)}
         
         # There's two beta's (learned param vectors) for every arm
-        self.forced_sample_betas = np.zeros((self.K, self.d,), dtype=np.float64)
-        self.all_sample_betas    = np.zeros((self.K, self.d,), dtype=np.float64)
+        # self.forced_sample_betas = np.zeros((self.K, self.d,), dtype=np.float64)
+        # self.all_sample_betas    = np.zeros((self.K, self.d,), dtype=np.float64)
 
-        
+        # CHECK LAMBDA: HALF
+        self.beta_T = Lasso(fit_intercept=False, alpha=(lambda1/2))
+        self.beta_S = Lasso(fit_intercept=False, alpha=(lambda2/2))
+
         # Initialize forced-sample sets.
         #   Generates timestep indices at which we will force a certain arm to be sampled,
         #   regardless of the features (i.e. covariates).
@@ -96,11 +103,13 @@ class LASSOBandit(object):
 
         # Update self.S and self.lambda2, used to recompute self.all_sample_betas
         self.S[selected_arm].append(timestep)
+
+        # CHECK LAMBDA / 2 (cuz sklearn lasso is 2n instead of n)
         self.lambda2 = self.lambda2_initial * np.sqrt(np.log(timestep * self.d) / timestep)
 
         # TODO(ojwang): recompute betas after updates, probably using 
-        # @piazza 890: update self.T with t; please check thank you :)
-        self.T[selected_arm].append(timestep)
+        # @piazza 890: update self.T with t; please check thank you :) but owen said the TA was wrong so probably dont?
+        # self.T[selected_arm].append(timestep)
 
         return selected_arm
 
@@ -155,7 +164,7 @@ if __name__ == "__main__":
     validation_iters = 250
 
     lasso_bandit = LASSOBandit(q, h, lambda1, lambda2, nb_feature_dims)
-    ds = DataStream("myroot/mydir/my_csv_file_name.csv")
+    ds = DataStream("myroot/mydir/my_csv_file_name.csv", seed=seed)
 
     # TODO(ojwang): 1-indexing
     #   The paper assumes timesteps start at 1.
