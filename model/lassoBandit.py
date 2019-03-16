@@ -54,7 +54,7 @@ class LASSOBandit(object):
         #  No two arms will have collisions in their respective forced-sampling indices.
         
 
-    def _get_action(timestep, x_features):
+    def _get_action(self, timestep, x_features):
         """ INTERNAL FUNCTION. Used by |self.predict|.
             Params:
                 timestep: non-negative index for timestep in the online prediction setting.
@@ -78,12 +78,14 @@ class LASSOBandit(object):
         # ALL-sample "select the best one"
         # Use the learned all-sample parameters (self.all_sample_betas)
         #   to select one arm, based on the argmax.
+
+        ##### To check: should the next line be (estimated_rewards = [x_features.dot(self.all_sample_betas[i]) for i in arms_passing_threshold])? #####
         estimated_rewards = [x_features.dot(self.all_sample_betas[i]) for i in range(self.K)]
         selected_arm = np.argmax(estimated_rewards)
         return selected_arm
 
 
-    def predict(timestep, x_features):
+    def predict(self, timestep, x_features):
         selected_arm = self._get_action(timestep, x_features)
 
         # Update self.S and self.lambda2, used to recompute self.all_sample_betas
