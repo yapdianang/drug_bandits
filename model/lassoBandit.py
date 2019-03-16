@@ -93,10 +93,43 @@ class LASSOBandit(object):
         self.lambda2 = self.lambda2_initial * np.sqrt(np.log(timestep * self.d) / timestep)
 
         # TODO(ojwang): recompute betas after updates
+        # @piazza 890: update self.T with t; please check thank you :)
+        self.T[selected_arm].append(timestep)
 
         return selected_arm
 
+    def evaluate(self):
+        """
+        Similar to LinUCB: every k iteration, evaluate the following:
+            Accuracy: this is done from fresh every evaluation, i.e. accuracy at timestep 500 shouldn't depend on accuracy on timestep 250
+            Regret: This is done cumulatively.
+        """
+        pass
+
         
+# General function outside LassoBandit class to calculate loss (max is 0).
+def calculate_reward(y_hat, y, real_dosage, mode='binary'):
+
+    if mode == 'binary':
+        return 0 if y_hat == y else -1
+
+    elif mode == 'mse':
+        return -((y_hat - y)**2)
+
+    elif mode == 'harsh':
+        return -(np.abs(best - truth).astype(float))
+
+    elif mode == 'real':
+        if y == 0:
+            val = 1.5
+        elif y == 1:
+            val = 5
+        else:
+            val = 9
+        return -np.abs(val - real_dosage)
+
+    else:
+        raise ValueError("Mode is not defined. Please select either one of 'binary', 'mse', 'harsh', ")
 
 
 
@@ -106,12 +139,14 @@ class LASSOBandit(object):
 
 if __name__ == "__main__":
 
-    # I made all these up. Please supply real values that work.
+    # I made all these up. Please supply real values that work. --> Perhaps use argparse?
     q = 1
     h = 0.5
     lambda1 = 0.25
     lambda2 = 0.125
     nb_feature_dims = 10
+    mode = 'binary'
+    validation_iters = 250
 
     lasso_bandit = LASSOBandit(q, h, lambda1, lambda2, nb_feature_dims)
     ds = DataStream("myroot/mydir/my_csv_file_name.csv")
@@ -120,9 +155,13 @@ if __name__ == "__main__":
     #   The paper assumes timesteps start at 1.
     #   The paper assumes actions/arms are enumerated [1, 2, ..., K]
     for timestep, (features, ground_truth_action, real_dosage) in enumerate(ds):
+
         # Do something
-        pass
-        # lasso_bandit.predict(timestep)
+        predicted = lasso_bandit.predict(timestep, features)
 
+        # calculate rewards to be 0 or -1 as per @piazza 828; can extend this to different losses as an extension
+        reward = calculate_reward(predicted, ground_truth_action, real_dosage, mode)
 
+        # if timestep > 0 and timestep % validation_iters == 0:
+        #     lasso_bandit.evaluate()
 
