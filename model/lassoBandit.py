@@ -85,14 +85,20 @@ class LASSOBandit(object):
         return selected_arm
 
 
-    def predict(self, timestep, x_features):
+    def predict(self, timestep, x_features, training=False):
+        """ 
+        Predicts the next action, can be used in training or testing. Calls self._get_action.
+        """
         selected_arm = self._get_action(timestep, x_features)
+
+        if not training:
+            return selected_arm
 
         # Update self.S and self.lambda2, used to recompute self.all_sample_betas
         self.S[selected_arm].append(timestep)
         self.lambda2 = self.lambda2_initial * np.sqrt(np.log(timestep * self.d) / timestep)
 
-        # TODO(ojwang): recompute betas after updates
+        # TODO(ojwang): recompute betas after updates, probably using 
         # @piazza 890: update self.T with t; please check thank you :)
         self.T[selected_arm].append(timestep)
 
@@ -157,7 +163,7 @@ if __name__ == "__main__":
     for timestep, (features, ground_truth_action, real_dosage) in enumerate(ds):
 
         # Do something
-        predicted = lasso_bandit.predict(timestep, features)
+        predicted = lasso_bandit.predict(timestep, features, training=True)
 
         # calculate rewards to be 0 or -1 as per @piazza 828; can extend this to different losses as an extension
         reward = calculate_reward(predicted, ground_truth_action, real_dosage, mode)
