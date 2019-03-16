@@ -1,55 +1,11 @@
 import numpy as np
-from utils import get_data
+import pandas as pd
+from utils import get_data, DataStream
 from collections import defaultdict
-from plot import plot_incorrects_and_regrets
-from sklearn.model_selection import train_test_split
+from plot import plot_
 import argparse
 import pickle
 import os
-
-
-class DataStream(object):
-    # Read in a csv, shuffle rows.
-    # Iterator below.
-    # For each row:
-        # yield feature vector extracted from that row, and ground truth action
-
-    def __init__(self, csv_path, seed=234):
-        features, dosage = get_data(csv_path, seed)
-
-        self.table, self.table_test, y, y_test = \
-                train_test_split(features, dosage, test_size=0.1, random_state=seed)
-
-        self.ground_truth, self.dosage = y[:,0], y[:,1]
-        self.ground_truth_test, self.dosage_test = y_test[:,0], y_test[:,1]
-
-        self.max_rows = len(self.table)
-        self.feature_dim = self.table.shape[-1]
-        self.current = 0
-
-    # Iterator methods
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        if self.current >= self.max_rows:
-            raise StopIteration
-        else:
-            # This line determines discrete buckets vs. floating point dosages #######################################################
-
-            # Depends on what Justin's csv columns contain
-
-            output = (self.table[self.current], self.ground_truth[self.current], self.dosage[self.current]) 
-            self.current += 1
-            return output
-
-
-
-def alpha(delta, T, K):
-    """ DEPRECATED """
-    # K = 3 actions
-    return np.sqrt(0.5 * np.log(2*T*K / delta))
 
 
 
@@ -90,11 +46,11 @@ class LinearUCBBandit(object):
             val = 5
         else:
             val = 9
-        return -(np.abs(val - real_dosage))
+        return -np.abs(val - real_dosage)
 
     # At some timestep t, we get a new action
     def get_action(self, features, ground_truth_action, real_dosage, training=False):
-        features = features.astype(int) 
+        features = features.astype(float) 
         # Translate the strings "low", "medium", "high" into (0,1,2) resp.
         if ground_truth_action == "low":
             ground_truth_action = 0
@@ -132,6 +88,7 @@ class LinearUCBBandit(object):
         elif self.mode == "real":
             reward = self.real_loss(best_action, real_dosage)
         
+        risk = np.abs(best_action - ground_truth_action) 
         regret = 0. - reward # optimal reward is always 0 (correct dosage given)
 
         # Update if training
@@ -139,52 +96,65 @@ class LinearUCBBandit(object):
             self.A[best_action] = self.A[best_action] + np.outer(features, features)
             self.b[best_action] = self.b[best_action] + features * reward
 
-        return best_action, reward, regret
+        return best_action, reward, regret, risk
 
 def evaluate(seed, ds, bandit):
     all_actions, nb_correct = 0, 0
     # run this on the test set
     actions = ['low', 'medium', 'high']
     for i, (features, ground_truth_action, real_dosage) in enumerate(zip(ds.table_test, ds.ground_truth_test, ds.dosage_test)):
-        best_action, reward, regret = bandit.get_action(features, ground_truth_action, real_dosage, training=False)
+        best_action, reward, regret, risk = bandit.get_action(features, ground_truth_action, real_dosage, training=False)
         all_actions += 1
         nb_correct += 1. if (actions[best_action] == ground_truth_action) else 0.
     return (nb_correct/all_actions)
 
 
-def perform_one_run(seed, incorrect_accuracy_over_runs, regret_over_runs, mode):
+def perform_one_run(seed, incorrect_accuracy_over_runs, regret_over_runs, risk_over_runs, mode, val=False, spacing=1000):
     ds = DataStream("../data/warfarin.csv", seed=seed)
     delta = 0.75  # UNUSED
     bandit = LinearUCBBandit(ds.max_rows, 3, ds.feature_dim, delta, mode)
 
-    print("Feature dimensions: {}, alpha: {}".format(ds.feature_dim, bandit.alpha))
+    print("Feature dimensions: {}, alpha: {}, number training patients: {}".format(ds.feature_dim, bandit.alpha, len(ds)))
 
     total_regret = 0
+    total_risk = 0
     nb_correct = 0
     actions = defaultdict(int)
-    x_vals, seed_regrets, seed_incorrects = [], [], [] 
+    x_vals, seed_regrets, seed_incorrects, seed_risks = [], [], [], []
 
     for i, (features, ground_truth_action, real_dosage) in enumerate(ds):
-        best_action, reward, regret = bandit.get_action(features, ground_truth_action, real_dosage, training=True)
+        best_action, reward, regret, risk = bandit.get_action(features, ground_truth_action, real_dosage, training=True)
         actions[best_action] += 1
         total_regret += regret
+        total_risk += risk
         nb_correct += 1 if (reward == 0) else 0
 
         # get values
-        if i>=100 and i%250 == 0:
+        if i>=100 and i%spacing == 0:
             x_vals.append(i)
             # acc = nb_correct / (i+1)
             seed_regrets.append(total_regret)
+            seed_risks.append(total_risk)
             acc = evaluate(seed, ds, bandit)
             seed_incorrects.append(1-acc) 
             print("accuracy at step {}: {}".format(i, acc))
+
+    x_vals.append(i)
+    seed_regrets.append(total_regret)
+    seed_risks.append(total_risk)
+    acc = evaluate(seed, ds, bandit)
+    seed_incorrects.append(1-acc) 
+    print("accuracy at step {}: {}".format(i, acc))
 
     accuracy = nb_correct / ds.max_rows
 
     print("Actions: ", actions)
     print("total regret:", total_regret)
+    print("cumulative accuracy", accuracy)
+
     incorrect_accuracy_over_runs.append(seed_incorrects)
     regret_over_runs.append(seed_regrets)
+    risk_over_runs.append(seed_risks)
     return x_vals
 
 if __name__ == "__main__":
@@ -198,12 +168,14 @@ if __name__ == "__main__":
     print(args.mode)
     seeds = range(10)
     # store the list of 
-    incorrect_accuracy_over_runs, regret_over_runs = [], []
+    incorrect_accuracy_over_runs, regret_over_runs, risk_over_runs = [], [], []
     for seed in seeds:
-        x_vals = perform_one_run(seed, incorrect_accuracy_over_runs, regret_over_runs, args.mode)
+        x_vals = perform_one_run(seed, incorrect_accuracy_over_runs, regret_over_runs, risk_over_runs, args.mode, spacing=1000)
     
     # plot incorrect and regret with confidence bounds 
-    plot_incorrects_and_regrets(x_vals, incorrect_accuracy_over_runs, regret_over_runs, args.mode) 
+    plot_(x_vals, incorrect_accuracy_over_runs, args.mode, 'continuous_percent_incorrect') 
+    plot_(x_vals, regret_over_runs, args.mode, 'continuous_regret') 
+    plot_(x_vals, risk_over_runs, args.mode, 'continuous_risk') 
     # Store our accuracies and regret
     """
     prefix = "linearUCB_" + args.mode

@@ -5,35 +5,22 @@ import numpy as np
 # set seeds to randomize our data
 seeds = range(10)
 
-def plot_incorrects_and_regrets(x_vals, incorrects, regrets, name):
+def plot_(x_vals, vals, name, graph_type):
 	alpha = 1.96
 
-	incorrect_means = np.mean(np.array(incorrects), axis=0)
-	incorrect_stds = np.std(np.array(incorrects), axis=0, ddof=1) / np.sqrt(len(incorrects))
-
-	regret_means = np.mean(np.array(regrets), axis=0)
-	regret_stds = np.std(np.array(regrets), axis=0, ddof=1) / np.sqrt(len(regrets))
-
-	plt.errorbar(x_vals, regret_means, yerr = regret_stds*alpha) 
-	plt.xlabel('patients seen')
-	plt.ylabel('regret')
-	plt.title('regret over patients seen')
-	plt.savefig('../plots/'+str(name)+'_regret.png')
-	plt.clf()
-	#plt.show()
+	means = np.mean(np.array(vals), axis=0)
+	stds = np.std(np.array(vals), axis=0, ddof=1) / np.sqrt(len(vals))
 
 	# construct a 95% confidence interval
-	plt.errorbar(x_vals, incorrect_means, yerr = incorrect_stds*alpha)
+	plt.errorbar(x_vals, means, yerr = stds*alpha)
 	plt.xlabel('patients seen')
-	plt.ylabel('percentage incorrect')
-	plt.title('percentage incorrect over patients seen')
-	plt.savefig('../plots/'+str(name)+'_incorrect.png')
+	plt.ylabel(graph_type)
+	plt.title(graph_type + ' over patients seen')
+	plt.savefig('../plots/{}_{}.png'.format(name, graph_type))
+	plt.cla()
 
-	print('confidence interval of percent incorrect [{}, {}]'.\
-		format(incorrect_means[-1] - incorrect_stds[-1]*alpha, incorrect_means[-1] + incorrect_stds[-1]*alpha))
-	print('confidence interval of regret [{}, {}]'.\
-		format(regret_means[-1] - regret_stds[-1]*alpha, regret_means[-1] + regret_stds[-1]*alpha))
-	# plt.show()
+	print('confidence interval of {} [{}, {}]'.\
+		format(graph_type, means[-1] - stds[-1]*alpha, means[-1] + stds[-1]*alpha))
 
 def main():
 	x_vals, incorrects, regrets = get_incorrects_and_regrets()
