@@ -73,6 +73,7 @@ class LinearUCBBandit(object):
             xT_A_x = features.T.dot(np.linalg.pinv(A)).dot(features)
             ucb_variance = self.alpha * np.sqrt(xT_A_x)
             upper_bound = theta.dot(features) + ucb_variance
+            # print(theta.dot(features), upper_bound, ucb_variance)
             all_upper_bounds.append(upper_bound)
 
         # Randomly tiebreak among the actions with the highest UCB
@@ -104,7 +105,7 @@ def evaluate(seed, ds, bandit):
 
 
 def perform_one_run(seed, incorrect_accuracy_over_runs, regret_over_runs, risk_over_runs, mode, val=False, spacing=1000):
-    ds = DataStream("../data/warfarin.csv", seed=seed)
+    ds = DataStream("../data/warfarin.csv", val=val, seed=seed)
     delta = 0.75  # UNUSED
     bandit = LinearUCBBandit(ds.max_rows, 3, ds.feature_dim, delta, mode)
 
@@ -164,7 +165,7 @@ if __name__ == "__main__":
     # store the list of 
     incorrect_accuracy_over_runs, regret_over_runs, risk_over_runs = [], [], []
     for seed in seeds:
-        x_vals = perform_one_run(seed, incorrect_accuracy_over_runs, regret_over_runs, risk_over_runs, args.mode, spacing=1000)
+        x_vals = perform_one_run(seed, incorrect_accuracy_over_runs, regret_over_runs, risk_over_runs, args.mode, val=False, spacing=1000)
     
     # plot incorrect and regret with confidence bounds 
     plot_(x_vals, incorrect_accuracy_over_runs, args.mode, 'continuous_percent_incorrect') 
