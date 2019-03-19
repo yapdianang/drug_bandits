@@ -2,9 +2,11 @@ import numpy as np
 
 from sklearn.linear_model import Lasso
 from losses import calculate_reward
-from utils import DataStream
+from utils import DataStream, get_arm_from_bucket_name
+from tqdm import tqdm
 
-np.seed(234)
+seed = 234
+np.random.seed(seed)
 
 class LASSOBandit(object):
     """ Implemented according to:
@@ -41,8 +43,6 @@ class LASSOBandit(object):
         # These are the LASSO estimators that will be in charge of updating betas
         #   at every timestep.
         # lambda is halved, to accomodate for implementation vs. paper details
-        self.forced_sample_estimator = Lasso(fit_intercept=False, alpha=(lambda1/2))
-        self.all_sample_estimator    = Lasso(fit_intercept=False, alpha=(lambda2/2))
 
         self.observed_history_x = []
         self.observed_history_y = []
@@ -105,26 +105,36 @@ class LASSOBandit(object):
         if not training:
             return selected_arm
 
+        ground_truth_action = get_arm_from_bucket_name(ground_truth_action)
         self.observed_history_x.append(x_features)
         self.observed_history_y.append(ground_truth_action)
 
         # Update self.S and self.lambda2, used to recompute self.all_sample_betas
         self.S[selected_arm].append(timestep)
 
-        self.lambda2 = self.lambda2_initial * np.sqrt(np.log(timestep * self.d) / timestep)
+        self.lambda2 = self.lambda2_initial * np.sqrt(np.log((timestep+1) * self.d) / (timestep+1))
 
         # recompute betas after updates
         # update forced sample beta update
-        T_up_til_now = self.T[selected_arm][:timestep+1]
-        np_history_x = np.asarray(self.observed_history_x)[T_up_til_now]
-        np_history_y = np.asarray(self.observed_history_y)[T_up_til_now]
-        self.forced_sample_estimator.fit(np_history_x, np_history_x)
-        self.forced_sample_betas = self.forced_sample_estimator.coef_
+        # print ("np.asarray(self.observed_history_x shape: {}".format(np.asarray(self.observed_history_x).shape))
+        # print ("np.asarray(self.observed_history_y shape: {}".format(np.asarray(self.observed_history_y).shape))
 
-        np_history_x = np.asarray(self.observed_history_x)[self.S[selected_arm]]
-        np_history_y = np.asarray(self.observed_history_y)[self.S[selected_arm]]
-        self.all_sample_estimator.fit(np_history_x, np_history_x)
-        self.all_sample_betas = self.all_sample_estimator.coef_
+        T_up_til_now_indices = [ts for ts in self.T[selected_arm] if ts <= timestep]
+        # print ("T up. till now: {}".format(T_up_til_now_indices))
+
+        np_history_x = np.asarray(self.observed_history_x)[T_up_til_now_indices]
+        np_history_y = np.asarray(self.observed_history_y)[T_up_til_now_indices]
+        # print ("Forced sample fit size x: {}; fir size y: {}".format(len(np_history_x), len(np_history_y)))
+
+        self.forced_sample_betas[selected_arm] = Lasso(fit_intercept=False, alpha=(self.lambda1/2), max_iter=10000).fit(np_history_x, np_history_y).coef_
+
+        S_indices = [ts for ts in self.S[selected_arm]]
+        # print ("S_indices: {}".format(S_indices))
+        np_history_x = np.asarray(self.observed_history_x)[S_indices]
+        np_history_y = np.asarray(self.observed_history_y)[S_indices]
+        # print ("All sample fit size x: {}; fir size y: {}".format(len(np_history_x), len(np_history_y)))
+
+        self.all_sample_betas[selected_arm] = Lasso(fit_intercept=False, alpha=(self.lambda2/2), max_iter=10000).fit(np_history_x, np_history_y).coef_
 
         return selected_arm
 
@@ -137,6 +147,7 @@ class LASSOBandit(object):
         all_actions, nb_correct = 0, 0
         total_regret = 0.
         # run this on the test set
+        actions = ['low', 'medium', 'high']
         for i, (features, ground_truth_action, real_dosage) in enumerate(zip(ds.table_test, ds.ground_truth_test, ds.dosage_test)):
             best_action = self.predict(i, features, ground_truth_action=ground_truth_action, training=False)
             reward = calculate_reward(best_action, ground_truth_action, real_dosage, mode=mode)
@@ -160,26 +171,26 @@ if __name__ == "__main__":
     h = 5
     lambda1 = 0.05
     lambda2 = 0.05
-    nb_feature_dims = 134 # TBD justin
-    mode = 'normal'
-    validation_iters = 250
 
-    lasso_bandit = LASSOBandit(q, h, lambda1, lambda2, nb_feature_dims)
-    ds = DataStream("myroot/mydir/my_csv_file_name.csv", seed=seed)
+    mode = 'normal'
+    validation_iters = 20
+
+    ds = DataStream("../data/warfarin.csv", seed=seed)
+    lasso_bandit = LASSOBandit(q, h, lambda1, lambda2, ds.feature_dim)
+    print ("Number of features:  {}".format(ds.feature_dim))
 
     eval_acc_history, eval_regret_history = [], []
 
     # Training Loop
     #   The paper assumes timesteps start at 1.
     #   The paper assumes actions/arms are enumerated [1, 2, ..., K], but we 0-index here instead.\
-    for i, (features, ground_truth_action, real_dosage) in enumerate(ds): # Training Loop
+    for timestep, (features, ground_truth_action, real_dosage) in enumerate(tqdm(ds)): # Training Loop
         # Timesteps need to be 1-indexed. We use a dummy iteration index i, and set timestep=i+1.
-        timestep = i + 1 
 
         selected_arm = lasso_bandit.predict(timestep, features, ground_truth_action=ground_truth_action, training=True)
 
         training_reward = calculate_reward(selected_arm, ground_truth_action, real_dosage, mode)
-        training_regret = 0 - training_reward
+        training_regret = 0. - training_reward
 
         # Every so often during the online training, validate against some val set
         #   Currently: val set = entire training set w/ ground truth
@@ -187,5 +198,6 @@ if __name__ == "__main__":
             eval_accuracy, eval_regret = lasso_bandit.evaluate(ds, mode)
             eval_acc_history.append(eval_accuracy)
             eval_regret_history.append(eval_regret) # not cumulative so far
-
+            print ("Accuracy at iter {}: {}".format(timestep, eval_accuracy))
+    print (eval_acc_accuracy)
     # plot 
