@@ -44,6 +44,9 @@ class LASSOBandit(object):
         self.forced_sample_estimator = Lasso(fit_intercept=False, alpha=(lambda1/2))
         self.all_sample_estimator    = Lasso(fit_intercept=False, alpha=(lambda2/2))
 
+        self.observed_history_x = []
+        self.observed_history_y = []
+
         # Initialize forced-sample sets.
         #   Generates timestep indices at which we will force a certain arm to be sampled,
         #   regardless of the features (i.e. covariates).
@@ -63,7 +66,7 @@ class LASSOBandit(object):
         #  No two arms will have collisions in their respective forced-sampling indices.
         
 
-    def _get_action(self, timestep, x_features):
+    def _get_action(self, timestep, x_features, training=False):
         """ INTERNAL FUNCTION. Used by |self.predict|.
             Params:
                 timestep: non-negative index for timestep in the online prediction setting.
@@ -73,9 +76,10 @@ class LASSOBandit(object):
                 non-negative integer i, in [0, 1, ..., K-1], the arm we pull.
         """
         # If this timestep is one designated for a forced sampling of some arm, then do it
-        for i in self.T:
-            if timestep in self.T[i]:
-                return i
+        if training:
+            for i in self.T:
+                if timestep in self.T[i]:
+                    return i
         
         # FORCED-sample "filter for the seemingly-good arms"
         # Use the learned forced-sample parameters (self.forced_sample_betas)
@@ -92,33 +96,53 @@ class LASSOBandit(object):
         return selected_arm
 
 
-    def predict(self, timestep, x_features, training=False):
+    def predict(self, timestep, x_features, ground_truth_action=None, training=False):
         """ 
         Predicts the next action, can be used in training or testing. Calls self._get_action.
         """
-        selected_arm = self._get_action(timestep, x_features)
+        selected_arm = self._get_action(timestep, x_features, training=training)
 
         if not training:
             return selected_arm
+
+        self.observed_history_x.append(x_features)
+        self.observed_history_y.append(ground_truth_action)
 
         # Update self.S and self.lambda2, used to recompute self.all_sample_betas
         self.S[selected_arm].append(timestep)
 
         self.lambda2 = self.lambda2_initial * np.sqrt(np.log(timestep * self.d) / timestep)
 
-        # recompute betas after updates, probably using 
-        T_up_til_now = self.T[selected_arm]
+        # recompute betas after updates
+        # update forced sample beta update
+        T_up_til_now = self.T[selected_arm][:timestep+1]
+        np_history_x = np.asarray(self.observed_history_x)[T_up_til_now]
+        np_history_y = np.asarray(self.observed_history_y)[T_up_til_now]
+        self.forced_sample_estimator.fit(np_history_x, np_history_x)
+        self.forced_sample_betas = self.forced_sample_estimator.coef_
 
+        np_history_x = np.asarray(self.observed_history_x)[self.S[selected_arm]]
+        np_history_y = np.asarray(self.observed_history_y)[self.S[selected_arm]]
+        self.all_sample_estimator.fit(np_history_x, np_history_x)
+        self.all_sample_betas = self.all_sample_estimator.coef_
 
         return selected_arm
 
-    def evaluate(self):
+    def evaluate(self, ds):
         """
         Similar to LinUCB: every k iteration, evaluate the following:
             Accuracy: this is done from fresh every evaluation, i.e. accuracy at timestep 500 shouldn't depend on accuracy on timestep 250
             Regret: This is done cumulatively.
         """
-        pass
+        all_actions, nb_correct = 0, 0
+        # run this on the test set
+        actions = ['low', 'medium', 'high']
+        for i, (features, ground_truth_action, real_dosage) in enumerate(zip(ds.table_test, ds.ground_truth_test, ds.dosage_test)):
+            best_action, reward, regret, risk = self.predict(i, features, ground_truth_action=ground_truth_action, training=False)
+            all_actions += 1
+            nb_correct += 1. if (actions[best_action] == ground_truth_action) else 0.
+        return (nb_correct/all_actions)
+            
 
 
 
@@ -147,7 +171,7 @@ if __name__ == "__main__":
     for timestep, (features, ground_truth_action, real_dosage) in enumerate(ds):
 
         # Do something
-        predicted = lasso_bandit.predict(timestep, features, training=True)
+        predicted = lasso_bandit.predict(timestep, features, ground_truth_action=ground_truth_action, training=True)
 
         # calculate rewards to be 0 or -1 as per @piazza 828; can extend this to different losses as an extension
         reward = calculate_reward(predicted, ground_truth_action, real_dosage, mode)
