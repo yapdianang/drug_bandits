@@ -128,20 +128,22 @@ class LASSOBandit(object):
 
         return selected_arm
 
-    def evaluate(self, ds):
+    def evaluate(self, ds, mode='normal'):
         """
         Similar to LinUCB: every k iteration, evaluate the following:
             Accuracy: this is done from fresh every evaluation, i.e. accuracy at timestep 500 shouldn't depend on accuracy on timestep 250
             Regret: This is done cumulatively.
         """
         all_actions, nb_correct = 0, 0
+        total_regret = 0.
         # run this on the test set
-        actions = ['low', 'medium', 'high']
         for i, (features, ground_truth_action, real_dosage) in enumerate(zip(ds.table_test, ds.ground_truth_test, ds.dosage_test)):
-            best_action, reward, regret, risk = self.predict(i, features, ground_truth_action=ground_truth_action, training=False)
+            best_action = self.predict(i, features, ground_truth_action=ground_truth_action, training=False)
+            reward = calculate_reward(best_action, ground_truth_action, real_dosage, mode=mode)
+            total_regret += 0 - reward
             all_actions += 1
             nb_correct += 1. if (actions[best_action] == ground_truth_action) else 0.
-        return (nb_correct/all_actions)
+        return (nb_correct/all_actions), total_regret
             
 
 
@@ -155,27 +157,35 @@ if __name__ == "__main__":
 
     # I made all these up. Please supply real values that work. --> Perhaps use argparse?
     q = 1
-    h = 0.5
-    lambda1 = 0.25
-    lambda2 = 0.125
-    nb_feature_dims = 10
-    mode = 'binary'
+    h = 5
+    lambda1 = 0.05
+    lambda2 = 0.05
+    nb_feature_dims = 134 # TBD justin
+    mode = 'normal'
     validation_iters = 250
 
     lasso_bandit = LASSOBandit(q, h, lambda1, lambda2, nb_feature_dims)
     ds = DataStream("myroot/mydir/my_csv_file_name.csv", seed=seed)
 
-    # TODO(ojwang): 1-indexing
+    eval_acc_history, eval_regret_history = [], []
+
+    # Training Loop
     #   The paper assumes timesteps start at 1.
-    #   The paper assumes actions/arms are enumerated [1, 2, ..., K]
-    for timestep, (features, ground_truth_action, real_dosage) in enumerate(ds):
+    #   The paper assumes actions/arms are enumerated [1, 2, ..., K], but we 0-index here instead.\
+    for i, (features, ground_truth_action, real_dosage) in enumerate(ds): # Training Loop
+        # Timesteps need to be 1-indexed. We use a dummy iteration index i, and set timestep=i+1.
+        timestep = i + 1 
 
-        # Do something
-        predicted = lasso_bandit.predict(timestep, features, ground_truth_action=ground_truth_action, training=True)
+        selected_arm = lasso_bandit.predict(timestep, features, ground_truth_action=ground_truth_action, training=True)
 
-        # calculate rewards to be 0 or -1 as per @piazza 828; can extend this to different losses as an extension
-        reward = calculate_reward(predicted, ground_truth_action, real_dosage, mode)
+        training_reward = calculate_reward(selected_arm, ground_truth_action, real_dosage, mode)
+        training_regret = 0 - training_reward
 
-        # if timestep > 0 and timestep % validation_iters == 0:
-        #     lasso_bandit.evaluate()
+        # Every so often during the online training, validate against some val set
+        #   Currently: val set = entire training set w/ ground truth
+        if timestep > 0 and timestep % validation_iters == 0:
+            eval_accuracy, eval_regret = lasso_bandit.evaluate(ds, mode)
+            eval_acc_history.append(eval_accuracy)
+            eval_regret_history.append(eval_regret) # not cumulative so far
 
+    # plot 
