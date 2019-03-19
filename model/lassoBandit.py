@@ -38,7 +38,9 @@ class LASSOBandit(object):
         
         # There's two beta's (learned param vectors) for every arm
         self.forced_sample_betas = np.zeros((self.K, self.d,), dtype=np.float64)
+        self.forced_sample_bias = np.zeros((self.K, ), dtype=np.float64)
         self.all_sample_betas    = np.zeros((self.K, self.d,), dtype=np.float64)
+        self.all_sample_bias = np.zeros((self.K, ), dtype=np.float64)
 
         # These are the LASSO estimators that will be in charge of updating betas
         #   at every timestep.
@@ -56,8 +58,8 @@ class LASSOBandit(object):
         #   With ~5500 data points, 15 is more than enough. 
         #   This gives us indices for T up to ~ 50K * q.
         sufficient_upper_n = 15
-        for i in range(self.K):
-            self.T[i] = [(2**n-1) * self.K * self.q + j \
+        for arm, i in enumerate(range(1, self.K+1)):
+            self.T[arm] = [(2**n-1) * self.K * self.q + j \
                             for n in range(sufficient_upper_n) \
                             for j in range(self.q*(i-1) + 1, self.q*i + 1)
                         ]
@@ -84,14 +86,15 @@ class LASSOBandit(object):
         # FORCED-sample "filter for the seemingly-good arms"
         # Use the learned forced-sample parameters (self.forced_sample_betas)
         #   to estimate reward for each arm, and filter for the best handful
-        estimated_rewards = [x_features.dot(self.forced_sample_betas[i]) for i in range(self.K)]
+        estimated_rewards = [x_features.dot(self.forced_sample_betas[i]) + self.forced_sample_bias[i] for i in range(self.K)]
+
         max_reward = max(estimated_rewards)
         arms_passing_threshold = [i for i, reward in enumerate(estimated_rewards) if reward > max_reward - self.h / 2]
-        
+
         # ALL-sample "select the best one"
         # Use the learned all-sample parameters (self.all_sample_betas)
         #   to select one arm, based on the argmax.
-        estimated_rewards = [x_features.dot(self.all_sample_betas[i]) for i in arms_passing_threshold]
+        estimated_rewards = [x_features.dot(self.all_sample_betas[i]) + self.all_sample_bias[i] for i in arms_passing_threshold]
         selected_arm = np.argmax(estimated_rewards)
         return selected_arm
 
@@ -105,7 +108,6 @@ class LASSOBandit(object):
         if not training:
             return selected_arm
 
-        ground_truth_action = get_arm_from_bucket_name(ground_truth_action)
         self.observed_history_x.append(x_features)
         self.observed_history_y.append(ground_truth_action)
 
@@ -120,21 +122,25 @@ class LASSOBandit(object):
         # print ("np.asarray(self.observed_history_y shape: {}".format(np.asarray(self.observed_history_y).shape))
 
         T_up_til_now_indices = [ts for ts in self.T[selected_arm] if ts <= timestep]
-        # print ("T up. till now: {}".format(T_up_til_now_indices))
 
-        np_history_x = np.asarray(self.observed_history_x)[T_up_til_now_indices]
-        np_history_y = np.asarray(self.observed_history_y)[T_up_til_now_indices]
-        # print ("Forced sample fit size x: {}; fir size y: {}".format(len(np_history_x), len(np_history_y)))
-
-        self.forced_sample_betas[selected_arm] = Lasso(fit_intercept=False, alpha=(self.lambda1/2), max_iter=10000).fit(np_history_x, np_history_y).coef_
+        try:
+            np_history_x = np.asarray(self.observed_history_x)[T_up_til_now_indices]
+            np_history_y = np.asarray(self.observed_history_y)[T_up_til_now_indices]
+            fit_forced = Lasso(fit_intercept=True, alpha=(self.lambda1/2), max_iter=30000)
+            fit_forced.fit(np_history_x, np_history_y)
+            self.forced_sample_betas[selected_arm] = fit_forced.coef_
+            self.forced_sample_bias[selected_arm] = fit_forced.intercept_
+        except:
+            pass
 
         S_indices = [ts for ts in self.S[selected_arm]]
-        # print ("S_indices: {}".format(S_indices))
         np_history_x = np.asarray(self.observed_history_x)[S_indices]
         np_history_y = np.asarray(self.observed_history_y)[S_indices]
-        # print ("All sample fit size x: {}; fir size y: {}".format(len(np_history_x), len(np_history_y)))
 
-        self.all_sample_betas[selected_arm] = Lasso(fit_intercept=False, alpha=(self.lambda2/2), max_iter=10000).fit(np_history_x, np_history_y).coef_
+        fit_all = Lasso(fit_intercept=True, alpha=(self.lambda2/2), max_iter=30000)
+        fit_all.fit(np_history_x, np_history_y)
+        self.all_sample_betas[selected_arm] = fit_all.coef_
+        self.all_sample_bias[selected_arm] = fit_all.intercept_
 
         return selected_arm
 
@@ -148,12 +154,16 @@ class LASSOBandit(object):
         total_regret = 0.
         # run this on the test set
         actions = ['low', 'medium', 'high']
-        for i, (features, ground_truth_action, real_dosage) in enumerate(zip(ds.table_test, ds.ground_truth_test, ds.dosage_test)):
+        for i, (features, ground_truth_action_name, real_dosage) in enumerate(zip(ds.table_test, ds.ground_truth_test, ds.dosage_test)):
+
+            ground_truth_action = get_arm_from_bucket_name(ground_truth_action_name)
+
             best_action = self.predict(i, features, ground_truth_action=ground_truth_action, training=False)
             reward = calculate_reward(best_action, ground_truth_action, real_dosage, mode=mode)
+
             total_regret += 0 - reward
             all_actions += 1
-            nb_correct += 1. if (actions[best_action] == ground_truth_action) else 0.
+            nb_correct += 1. if (best_action== ground_truth_action) else 0.
         return (nb_correct/all_actions), total_regret
             
 
@@ -167,10 +177,10 @@ class LASSOBandit(object):
 if __name__ == "__main__":
 
     # I made all these up. Please supply real values that work. --> Perhaps use argparse?
-    q = 1
-    h = 5
-    lambda1 = 0.05
-    lambda2 = 0.05
+    q = 15
+    h = 2
+    lambda1 = 3
+    lambda2 = 3
 
     mode = 'normal'
     validation_iters = 20
@@ -184,12 +194,14 @@ if __name__ == "__main__":
     # Training Loop
     #   The paper assumes timesteps start at 1.
     #   The paper assumes actions/arms are enumerated [1, 2, ..., K], but we 0-index here instead.\
-    for timestep, (features, ground_truth_action, real_dosage) in enumerate(tqdm(ds)): # Training Loop
+    for timestep, (features, ground_truth_action_name, real_dosage) in enumerate(tqdm(ds)): # Training Loop
         # Timesteps need to be 1-indexed. We use a dummy iteration index i, and set timestep=i+1.
 
-        selected_arm = lasso_bandit.predict(timestep, features, ground_truth_action=ground_truth_action, training=True)
-
-        training_reward = calculate_reward(selected_arm, ground_truth_action, real_dosage, mode)
+        ground_truth_action = get_arm_from_bucket_name(ground_truth_action_name)
+        best_action = lasso_bandit.predict(timestep, features, ground_truth_action=ground_truth_action, training=True)
+        # print (selected_arm, get_arm_from_bucket_name(ground_truth_action))
+        training_reward = calculate_reward(best_action, ground_truth_action, real_dosage, mode)
+        # print (training_reward)
         training_regret = 0. - training_reward
 
         # Every so often during the online training, validate against some val set

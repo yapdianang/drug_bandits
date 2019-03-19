@@ -1,4 +1,4 @@
-import numpy
+import numpy as np
 
 # General function outside LassoBandit class to calculate loss (max is 0).
 def calculate_reward(y_hat, y, real_dosage, mode='normal'):
@@ -10,7 +10,7 @@ def calculate_reward(y_hat, y, real_dosage, mode='normal'):
         return -((y_hat - y)**2)
 
     elif mode == 'harsh':
-        return -(np.abs(best - truth).astype(float))
+        return -(np.abs(y_hat - real_dosage).astype(float))
 
     elif mode == 'real':
         if y == 0:
