@@ -122,7 +122,7 @@ class LASSOBandit(object):
         return selected_arm
 
 
-    def predict(self, timestep, x_features, ground_truth_action=None, training=False):
+    def get_action(self, timestep, x_features, ground_truth_action, real_dosage, training=False):
         """ 
         Predicts the next action, can be used in training or testing. Calls self._get_action.
         """
@@ -153,7 +153,8 @@ class LASSOBandit(object):
         T_up_til_now_indices = [ts for ts in self.T[selected_arm] if ts <= timestep]
         np_history_x = self.access_indices_in_list(self.observed_history_x, T_up_til_now_indices)
         np_history_y = self.access_indices_in_list(self.observed_history_y, T_up_til_now_indices)
-        self.forced_params[selected_arm].fit(np_history_x, np_history_y)
+        y_history = np.equal(np_history_y,selected_arm) - 1
+        self.forced_params[selected_arm].fit(np_history_x, y_history)
         self.forced_sample_betas[selected_arm] = self.forced_params[selected_arm].coef_
         #self.forced_sample_bias[selected_arm] = fit_forced.intercept_
 
@@ -163,11 +164,12 @@ class LASSOBandit(object):
             lasso.set_params(alpha = self.lambda2/2)  # update lambda2 for this timestep
             np_history_x =  self.access_indices_in_list(self.observed_history_x, self.S[arm])
             np_history_y = self.access_indices_in_list(self.observed_history_y, self.S[arm])
+            y_history = np.equal(np_history_y, selected_arm) - 1
             if len(np_history_x) == 0:
                 # There are no samples for this arm yet, cannot fit
                 continue
             if arm == selected_arm:
-                lasso.fit(np_history_x, np_history_y)
+                lasso.fit(np_history_x, y_history)
             self.all_sample_betas[arm] = lasso.coef_
             # self.all_sample_bias[arm] = fit_all.intercept_
 
@@ -189,7 +191,7 @@ class LASSOBandit(object):
         for i, (features, ground_truth_action_name, real_dosage) in enumerate(zip(ds.table_test, ds.ground_truth_test, ds.dosage_test)):
             timestep = i+1  # Start timesteps 1-indexed
             ground_truth_action = get_arm_from_bucket_name(ground_truth_action_name)
-            best_action = self.predict(timestep, features, ground_truth_action=ground_truth_action, training=False)
+            best_action = self.get_action(timestep, features, ground_truth_action, real_dosage, training=False)
             reward = losses.calculate_reward(best_action, ground_truth_action, real_dosage, mode=mode)
             ############## print("gta %d, selected %d, reward %d" % (ground_truth_action, best_action, reward))
             total_regret += 0 - reward
@@ -209,8 +211,8 @@ class LASSOBandit(object):
 if __name__ == "__main__":
 
     # I made all these up. Please supply real values that work. --> Perhaps use argparse?
-    q = 12
-    h = 2
+    q = 7
+    h = 5 
     lambda1 = 0.1
     lambda2 = 0.1
 
