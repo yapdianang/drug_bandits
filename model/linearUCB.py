@@ -149,9 +149,9 @@ if __name__ == "__main__":
         x_vals = perform_one_run(seed, incorrect_accuracy_over_runs, regret_over_runs, risk_over_runs, args.mode, val=True, spacing=500)
     
     # plot incorrect and regret with confidence bounds 
-    plot_(x_vals, incorrect_accuracy_over_runs, args.mode, 'continuous_percent_incorrect') 
-    plot_(x_vals, regret_over_runs, args.mode, 'continuous_regret') 
-    plot_(x_vals, risk_over_runs, args.mode, 'continuous_risk') 
+    plot_(x_vals, incorrect_accuracy_over_runs, args.mode, 'all_percent_incorrect') 
+    plot_(x_vals, regret_over_runs, args.mode, 'all_regret') 
+    plot_(x_vals, risk_over_runs, args.mode, 'all_risk') 
     # Store our accuracies and regret
     """
     prefix = "linearUCB_" + args.mode
