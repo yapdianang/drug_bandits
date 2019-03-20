@@ -30,25 +30,6 @@ class LinearUCBBandit(object):
         self.b = [np.zeros((self.d,)) for _ in range(K)] # (d,) vector
         self.mode = mode
 
-    
-    def normal_loss(self, best, truth):
-        return 0. if best == truth else -1.
-
-    def mse_loss(self, best, truth):
-        return -((best - truth).astype(float) ** 2)
-
-    def harsh_loss(self, best, truth):
-        return -(np.abs(best - truth).astype(float))
-
-    def real_loss(self, best, real_dosage):
-        if best == 0:
-            val = 1.5
-        elif best == 1:
-            val = 5
-        else:
-            val = 9
-        return -np.abs(val - real_dosage)
-
     # At some timestep t, we get a new action
     def get_action(self, features, ground_truth_action, real_dosage, training=False):
         features = features.astype(float) 
@@ -82,7 +63,7 @@ class LinearUCBBandit(object):
         # Choose action, observe payoff
         # reward = 0. if best_action == ground_truth_action else -1.
         reward = calculate_reward(best_action, ground_truth_action, real_dosage, self.mode)
-        
+
         risk = np.abs(best_action - ground_truth_action) 
         regret = 0. - reward # optimal reward is always 0 (correct dosage given)
 
@@ -115,6 +96,7 @@ def perform_one_run(seed, incorrect_accuracy_over_runs, regret_over_runs, risk_o
     total_risk = 0
     nb_correct = 0
     actions = defaultdict(int)
+    action_map = ['low', 'medium', 'high']
     x_vals, seed_regrets, seed_incorrects, seed_risks = [], [], [], []
 
     for i, (features, ground_truth_action, real_dosage) in enumerate(ds):
@@ -122,7 +104,7 @@ def perform_one_run(seed, incorrect_accuracy_over_runs, regret_over_runs, risk_o
         actions[best_action] += 1
         total_regret += regret
         total_risk += risk
-        nb_correct += 1 if (reward == 0) else 0
+        nb_correct += 1 if (action_map[best_action] == ground_truth_action) else 0
 
         # get values
         if i>=100 and i%spacing == 0:
@@ -165,7 +147,7 @@ if __name__ == "__main__":
     # store the list of 
     incorrect_accuracy_over_runs, regret_over_runs, risk_over_runs = [], [], []
     for seed in seeds:
-        x_vals = perform_one_run(seed, incorrect_accuracy_over_runs, regret_over_runs, risk_over_runs, args.mode, val=False, spacing=1000)
+        x_vals = perform_one_run(seed, incorrect_accuracy_over_runs, regret_over_runs, risk_over_runs, args.mode, val=True, spacing=500)
     
     # plot incorrect and regret with confidence bounds 
     plot_(x_vals, incorrect_accuracy_over_runs, args.mode, 'continuous_percent_incorrect') 

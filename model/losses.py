@@ -8,7 +8,7 @@ def calculate_reward(y_hat, y, real_dosage, mode='normal'):
 
     # DEPRECATED dont use
     elif mode == 'mse':
-        return -((y_hat - real_dosage)**2)
+        return -((y_hat - y)**2)
 
     elif mode == 'harsh':
         output = -(np.abs(y_hat - y).astype(float))  # 0, -1, or -2
