@@ -164,7 +164,7 @@ class LASSOBandit(object):
             np_history_x =  self.access_indices_in_list(self.observed_history_x, self.S[arm])
             np_history_y = self.access_indices_in_list(self.observed_history_y, self.S[arm])
             if len(np_history_x) == 0:
-                # There are no samples for this arm yet, cannot fit
+                print("There are no samples for this arm yet, cannot fit")
                 continue
             lasso.fit(np_history_x, np_history_y)
             self.all_sample_betas[arm] = lasso.coef_
