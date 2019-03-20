@@ -16,9 +16,9 @@ def calculate_reward(y_hat, y, real_dosage, mode='normal'):
         return output
 
     elif mode == 'real':
-        if y == 0:
+        if y_hat == 0:
             val = 1.5
-        elif y == 1:
+        elif y_hat == 1:
             val = 5
         else:
             val = 9

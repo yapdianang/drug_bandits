@@ -9,7 +9,6 @@ import pickle
 import os
 
 
-
 class LinearUCBBandit(object):
 
     def __init__(self, T, K, d, delta, mode):
