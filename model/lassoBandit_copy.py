@@ -32,7 +32,6 @@ class LASSOBandit(object):
         #   For every arm i, the set of timesteps at which we will force-sample arm i
         self.T = {i : [] for i in range(1, self.K+1)}
         self.generate_T_indices()
-
         for arm in self.T:
             print("sample T-indices for arm %d:" % arm)
             print(self.T[arm][:40])
@@ -107,24 +106,19 @@ class LASSOBandit(object):
         # FORCED-sample "filter for the seemingly-good arms"
         # Use the learned forced-sample parameters (self.forced_sample_betas)
         #   to estimate reward for each arm, and filter for the best handful
-        #estimated_rewards = [self.forced_sample_betas[i].dot(x_features.squeeze()) for i in range(1, self.K+1)]
-        estimated_rewards = [self.forced_params[i].predict(x_features) for i in range(1, self.K+1)]
+        estimated_rewards = [self.forced_sample_betas[i].dot(x_features.squeeze()) for i in range(1, self.K+1)]
 
         max_reward = max(estimated_rewards)
-        arms_passing_threshold = [i+1 for i, reward in enumerate(estimated_rewards) if (reward > max_reward - (self.h / 2))]
-
+        arms_passing_threshold = [i+1 for i, reward in enumerate(estimated_rewards) if reward > max_reward - self.h / 2]
         # print("The arms passing threshold:", arms_passing_threshold)
 
         # ALL-sample "select the best one"
         # Use the learned all-sample parameters (self.all_sample_betas)
         #   to select one arm, based on the argmax.
-        #estimated_rewards = [(i, self.all_sample_betas[i].dot(x_features.squeeze())) for i in arms_passing_threshold]
-        estimated_rewards = [(i, self.all_params[i].predict(x_features)[0]) for i in arms_passing_threshold]
-
+        estimated_rewards = [(i, self.all_sample_betas[i].dot(x_features.squeeze())) for i in arms_passing_threshold]
         estimated_rewards = sorted(estimated_rewards, reverse=True, key=lambda tup: tup[1])
         # print("estimated_rewards:", estimated_rewards)
         selected_arm = estimated_rewards[0][0]  # Get the arm associated with highest estimated reward (with all_params)
-
         return selected_arm
 
 
@@ -133,7 +127,6 @@ class LASSOBandit(object):
         Predicts the next action, can be used in training or testing. Calls self._get_action.
         """
         # |x_features| needs to be 2D (nb_samples, nb_features)
-
         augmented_x_features = x_features
         if len(x_features.shape) == 1:
             augmented_x_features = x_features[np.newaxis, :]
@@ -160,7 +153,6 @@ class LASSOBandit(object):
         T_up_til_now_indices = [ts for ts in self.T[selected_arm] if ts <= timestep]
         np_history_x = self.access_indices_in_list(self.observed_history_x, T_up_til_now_indices)
         np_history_y = self.access_indices_in_list(self.observed_history_y, T_up_til_now_indices)
-
         self.forced_params[selected_arm].fit(np_history_x, np_history_y)
         self.forced_sample_betas[selected_arm] = self.forced_params[selected_arm].coef_
         #self.forced_sample_bias[selected_arm] = fit_forced.intercept_
@@ -174,7 +166,8 @@ class LASSOBandit(object):
             if len(np_history_x) == 0:
                 # There are no samples for this arm yet, cannot fit
                 continue
-            lasso.fit(np_history_x, np_history_y)
+            if arm == selected_arm:
+                lasso.fit(np_history_x, np_history_y)
             self.all_sample_betas[arm] = lasso.coef_
             # self.all_sample_bias[arm] = fit_all.intercept_
 
@@ -196,10 +189,8 @@ class LASSOBandit(object):
         for i, (features, ground_truth_action_name, real_dosage) in enumerate(zip(ds.table_test, ds.ground_truth_test, ds.dosage_test)):
             timestep = i+1  # Start timesteps 1-indexed
             ground_truth_action = get_arm_from_bucket_name(ground_truth_action_name)
-
             best_action = self.predict(timestep, features, ground_truth_action=ground_truth_action, training=False)
             reward = losses.calculate_reward(best_action, ground_truth_action, real_dosage, mode=mode)
-
             ############## print("gta %d, selected %d, reward %d" % (ground_truth_action, best_action, reward))
             total_regret += 0 - reward
             all_actions += 1
@@ -218,10 +209,10 @@ class LASSOBandit(object):
 if __name__ == "__main__":
 
     # I made all these up. Please supply real values that work. --> Perhaps use argparse?
-    q = 10
-    h = 1
-    lambda1 = 0.05
-    lambda2 = 0.05
+    q = 12
+    h = 2
+    lambda1 = 0.1
+    lambda2 = 0.1
 
     mode = 'normal'
     validation_iters = 200
@@ -241,7 +232,6 @@ if __name__ == "__main__":
         ground_truth_action = get_arm_from_bucket_name(ground_truth_action_name)
 
         best_action = lasso_bandit.predict(timestep, features, ground_truth_action=ground_truth_action, training=True)
-
         # print (selected_arm, get_arm_from_bucket_name(ground_truth_action))
         training_reward = losses.calculate_reward(best_action, ground_truth_action, real_dosage, mode)
         # print (training_reward)
