@@ -57,11 +57,11 @@ def get_bucket(dosage):
 
 def get_arm_from_bucket_name(lowmedhigh):
 	if lowmedhigh == "low":
-		return 0
-	elif lowmedhigh == "medium":
 		return 1
-	elif lowmedhigh == "high":
+	elif lowmedhigh == "medium":
 		return 2
+	elif lowmedhigh == "high":
+		return 3
 	else:
 		raise ValueError('you don goofed')
 
