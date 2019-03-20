@@ -11,7 +11,7 @@ def calculate_reward(y_hat, y, real_dosage, mode='normal'):
         return -((y_hat - real_dosage)**2)
 
     elif mode == 'harsh':
-        output = (np.abs(y_hat - y).astype(float))  # 0, -1, or -2
+        output = -(np.abs(y_hat - y).astype(float))  # 0, -1, or -2
         assert output in [0, -1, -2]
         return output
 
