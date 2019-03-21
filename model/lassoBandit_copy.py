@@ -1,8 +1,8 @@
 import numpy as np
 
 from sklearn.linear_model import Lasso
-import losses
-from utils import DataStream, get_arm_from_bucket_name
+from losses import calculate_reward
+from utils import DataStream, get_arm_from_bucket_name 
 from tqdm import tqdm
 
 seed = 234
@@ -13,7 +13,7 @@ class LASSOBandit(object):
         http://web.stanford.edu/~bayati/papers/lassoBandit.pdf
     """
 
-    def __init__(self, q, h, lambda1, lambda2, nb_feature_dims, K=3):
+    def __init__(self, q, h, lambda1, lambda2, nb_feature_dims, K=3, mode='normal'):
         """ Params:
                 q is a positive integer.
                 h is a positive real. Both are used to parametrize the LASSO Bandit model.
@@ -27,6 +27,7 @@ class LASSOBandit(object):
         self.lambda2_initial = lambda2  # This is used to recompute self.lambda2 on future timesteps
         self.d = nb_feature_dims
         self.K = K
+        self.mode = mode
 
         # Force-Sample Sets:
         #   For every arm i, the set of timesteps at which we will force-sample arm i
@@ -127,15 +128,28 @@ class LASSOBandit(object):
         Predicts the next action, can be used in training or testing. Calls self._get_action.
         """
         # |x_features| needs to be 2D (nb_samples, nb_features)
+
         augmented_x_features = x_features
         if len(x_features.shape) == 1:
             augmented_x_features = x_features[np.newaxis, :]
             # print("x_features shape:", x_features.shape)
 
+        if ground_truth_action == "low":
+            ground_truth_action = 1 
+        elif ground_truth_action == "medium":
+            ground_truth_action = 2 
+        elif ground_truth_action == "high":
+            ground_truth_action = 3 
+        else:
+            raise ValueError("ground_truth_action: not one of 'low', 'medium', 'high'")
+
         selected_arm = self._get_action(timestep, augmented_x_features, training=training)
+        reward = calculate_reward(selected_arm, ground_truth_action, real_dosage, self.mode) 
+        risk = np.abs(selected_arm - ground_truth_action) 
+        regret = 0. - reward # optimal reward is always 0 (correct dosage given)
 
         if not training:
-            return selected_arm
+            return selected_arm-1, reward, regret, risk
 
         self.observed_history_x.append(x_features)
         self.observed_history_y.append(ground_truth_action)
@@ -153,7 +167,8 @@ class LASSOBandit(object):
         T_up_til_now_indices = [ts for ts in self.T[selected_arm] if ts <= timestep]
         np_history_x = self.access_indices_in_list(self.observed_history_x, T_up_til_now_indices)
         np_history_y = self.access_indices_in_list(self.observed_history_y, T_up_til_now_indices)
-        y_history = np.equal(np_history_y,selected_arm) - 1
+        y_history = [calculate_reward(selected_arm, y, 0, self.mode) for y in np_history_y]
+        # y_history = np.equal(np_history_y,selected_arm) - 1
         self.forced_params[selected_arm].fit(np_history_x, y_history)
         self.forced_sample_betas[selected_arm] = self.forced_params[selected_arm].coef_
         #self.forced_sample_bias[selected_arm] = fit_forced.intercept_
@@ -164,7 +179,8 @@ class LASSOBandit(object):
             lasso.set_params(alpha = self.lambda2/2)  # update lambda2 for this timestep
             np_history_x =  self.access_indices_in_list(self.observed_history_x, self.S[arm])
             np_history_y = self.access_indices_in_list(self.observed_history_y, self.S[arm])
-            y_history = np.equal(np_history_y, selected_arm) - 1
+            y_history = [calculate_reward(selected_arm, y, 0, self.mode) for y in np_history_y]
+            # y_history = np.equal(np_history_y, selected_arm) - 1
             if len(np_history_x) == 0:
                 # There are no samples for this arm yet, cannot fit
                 continue
@@ -173,79 +189,4 @@ class LASSOBandit(object):
             self.all_sample_betas[arm] = lasso.coef_
             # self.all_sample_bias[arm] = fit_all.intercept_
 
-        return selected_arm
-
-    def evaluate(self, ds, mode='normal'):
-        """
-        Similar to LinUCB: every k iteration, evaluate the following:
-            Accuracy: this is done from fresh every evaluation, i.e. accuracy at timestep 500 shouldn't depend on accuracy on timestep 250
-            Regret: This is done cumulatively.
-
-            This is the evaluation loop. A subroutine of the training loop, similar code.
-        """
-        all_actions = 0
-        nb_correct = 0
-        total_regret = 0.
-        # run this on the test set
-        actions = ['low', 'medium', 'high']
-        for i, (features, ground_truth_action_name, real_dosage) in enumerate(zip(ds.table_test, ds.ground_truth_test, ds.dosage_test)):
-            timestep = i+1  # Start timesteps 1-indexed
-            ground_truth_action = get_arm_from_bucket_name(ground_truth_action_name)
-            best_action = self.get_action(timestep, features, ground_truth_action, real_dosage, training=False)
-            reward = losses.calculate_reward(best_action, ground_truth_action, real_dosage, mode=mode)
-            ############## print("gta %d, selected %d, reward %d" % (ground_truth_action, best_action, reward))
-            total_regret += 0 - reward
-            all_actions += 1
-            nb_correct += 1. if (best_action == ground_truth_action) else 0.
-
-        return (nb_correct/all_actions), total_regret
-            
-
-
-
-
-
-################################################################################
-
-
-if __name__ == "__main__":
-
-    # I made all these up. Please supply real values that work. --> Perhaps use argparse?
-    q = 7
-    h = 5 
-    lambda1 = 0.1
-    lambda2 = 0.1
-
-    mode = 'normal'
-    validation_iters = 200
-
-    ds = DataStream("../data/warfarin.csv", seed=seed)
-    lasso_bandit = LASSOBandit(q, h, lambda1, lambda2, ds.feature_dim)
-    print ("Number of features:  {}".format(ds.feature_dim))
-
-    eval_acc_history = []
-    eval_regret_history = []
-
-    # Training Loop
-    #   The paper assumes timesteps start at 1.
-    for i, (features, ground_truth_action_name, real_dosage) in enumerate(tqdm(ds)): # Training Loop
-        # Timesteps need to be 1-indexed. We use a dummy iteration index i, and set timestep=i+1.
-        timestep = i+1
-        ground_truth_action = get_arm_from_bucket_name(ground_truth_action_name)
-
-        best_action = lasso_bandit.predict(timestep, features, ground_truth_action=ground_truth_action, training=True)
-        # print (selected_arm, get_arm_from_bucket_name(ground_truth_action))
-        training_reward = losses.calculate_reward(best_action, ground_truth_action, real_dosage, mode)
-        # print (training_reward)
-        training_regret = 0. - training_reward  # Unused rn
-
-        # Every so often during the online training, validate against some val set
-        #   Currently: val set = entire training set w/ ground truth
-        if timestep % validation_iters == 0:
-            new_ds = DataStream("../data/warfarin.csv")
-            eval_accuracy, eval_regret = lasso_bandit.evaluate(new_ds, mode)
-            eval_acc_history.append(eval_accuracy)
-            eval_regret_history.append(eval_regret) # not cumulative so far
-            print ("Accuracy at iter {}: {}".format(timestep, eval_accuracy))
-
-    # plot 
+        return selected_arm-1, reward, regret, risk
