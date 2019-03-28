@@ -5,6 +5,7 @@ from losses import calculate_reward
 from collections import defaultdict
 from linearUCB import LinearUCBBandit
 from thompsonBandit import ThompsonBandit
+from lassoBandit_copy import LASSOBandit
 from plot import plot_
 import argparse
 
@@ -13,7 +14,7 @@ def evaluate(seed, ds, bandit):
     # run this on the test set
     actions = ['low', 'medium', 'high']
     for i, (features, ground_truth_action, real_dosage) in enumerate(zip(ds.table_test, ds.ground_truth_test, ds.dosage_test)):
-        best_action, reward, regret, risk = bandit.get_action(features, ground_truth_action, real_dosage, training=False)
+        best_action, reward, regret, risk = bandit.get_action(i+1, features, ground_truth_action, real_dosage, training=False)
         all_actions += 1
         nb_correct += 1. if (actions[best_action] == ground_truth_action) else 0.
     return (nb_correct/all_actions)
@@ -28,6 +29,8 @@ def perform_one_run(seed, incorrect_accuracy_over_runs, regret_over_runs, \
         bandit = LinearUCBBandit(ds.max_rows, 3, ds.feature_dim, delta, mode)
     elif bandit == 'thompson':
         bandit = ThompsonBandit(3, ds.feature_dim, mode)
+    elif bandit == 'lasso':
+        bandit = LASSOBandit(7, 5, .1, .1, ds.feature_dim, 3, mode)
     else:
         raise ValueError("bandit not linear or thompson")
 
@@ -41,7 +44,7 @@ def perform_one_run(seed, incorrect_accuracy_over_runs, regret_over_runs, \
     x_vals, seed_regrets, seed_incorrects, seed_risks = [], [], [], []
 
     for i, (features, ground_truth_action, real_dosage) in enumerate(ds):
-        best_action, reward, regret, risk = bandit.get_action(features, ground_truth_action, real_dosage, training=True)
+        best_action, reward, regret, risk = bandit.get_action(i+1, features, ground_truth_action, real_dosage, training=True)
         actions[best_action] += 1
         total_regret += regret
         total_risk += risk
@@ -80,7 +83,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='CS 234 default project.')
     parser.add_argument("--mode", choices=["normal", "mse", "harsh", "real"], 
                         help="variation of reward to run.", default="normal")
-    parser.add_argument("--bandit", choices=["linear", "thompson"], 
+    parser.add_argument("--bandit", choices=["linear", "thompson", "lasso"], 
                         help="type of bandit to run.", default="linear")
     args = parser.parse_args()
 

@@ -19,7 +19,7 @@ class ThompsonBandit(object):
 		self.mu = [np.zeros(d) for _ in range(self.K)]
 		self.f = [np.zeros(d) for _ in range(self.K)]
 
-	def get_action(self, features, ground_truth_action, real_dosage, training=False):
+	def get_action(self, timestep, features, ground_truth_action, real_dosage, training=False):
 		features = features.astype(float) 
 		# Translate the strings "low", "medium", "high" into (0,1,2) resp.
 		if ground_truth_action == "low":

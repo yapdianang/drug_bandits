@@ -30,7 +30,7 @@ class LinearUCBBandit(object):
         self.mode = mode
 
     # At some timestep t, we get a new action
-    def get_action(self, features, ground_truth_action, real_dosage, training=False):
+    def get_action(self, timestep, features, ground_truth_action, real_dosage, training=False):
         features = features.astype(float) 
         # Translate the strings "low", "medium", "high" into (0,1,2) resp.
         if ground_truth_action == "low":
