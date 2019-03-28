@@ -15,9 +15,9 @@ class ThompsonBandit(object):
 		# fix the value of v2 for now
 		self.v2 = .05
 		# make one value for each arm and select best one
-		self.b = [np.eye(d) for _ in range(K)]
-		self.mu = [np.zeros(d) for _ in range(K)]
-		self.f = [np.zeros(d) for _ in range(K)]
+		self.b = [np.eye(d) for _ in range(self.K)]
+		self.mu = [np.zeros(d) for _ in range(self.K)]
+		self.f = [np.zeros(d) for _ in range(self.K)]
 
 	def get_action(self, features, ground_truth_action, real_dosage, training=False):
 		features = features.astype(float) 
